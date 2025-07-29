@@ -1,38 +1,135 @@
 #include <SPI.h>
-#include <Ethernet.h>  // Gunakan Ethernet_Generic jika perlu
+#include <Ethernet.h>
 #include "FS.h"
 #include "SPIFFS.h"
 
-// Konfigurasi Ethernet
+// Ethernet config
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-IPAddress ip(192, 168, 1, 177);  // Static fallback IP
+IPAddress ip(192, 168, 1, 177);
 EthernetServer server(80);
 
-// Pin SPI (VSPI)
+// Pin W5500
 #define PIN_SCK  18
 #define PIN_MISO 19
 #define PIN_MOSI 23
-#define PIN_CS   5  // Wajib disesuaikan dengan wiring
+#define PIN_CS   5
 
-// Path file di SPIFFS
+// Path file
 const char* dataPath = "/data.txt";
 
-//////////////////////////
-//  FUNGSI PENDUKUNG
-//////////////////////////
+// Global state
+String currentRequest = "";
+EthernetClient client;
+unsigned long lastClientCheck = 0;
+const unsigned long clientTimeout = 1000;
 
-void sendHTML(EthernetClient &client, String msg = "") {
+// Function declarations
+void handleRequest(EthernetClient &client, String request);
+void sendHTML(EthernetClient &client, String msg = "");
+void writeData(String id, String nama, String unit);
+void eraseAllData();
+void deleteRowById(String targetId);
+String urlDecode(String input);
+
+void setup() {
+  Serial.begin(115200);
+  SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);
+  Ethernet.init(PIN_CS);
+
+  if (!SPIFFS.begin(true)) {
+    Serial.println("Gagal mount SPIFFS");
+    return;
+  }
+
+  Ethernet.begin(mac, ip);
+  delay(1000);
+  server.begin();
+  Serial.print("Server aktif di: ");
+  Serial.println(Ethernet.localIP());
+
+  if (!SPIFFS.exists(dataPath)) {
+    File f = SPIFFS.open(dataPath, FILE_WRITE);
+    f.close();
+  }
+}
+
+void loop() {
+  if (!client || !client.connected()) {
+    client = server.available();
+    currentRequest = "";
+    lastClientCheck = millis();
+    return;
+  }
+
+  while (client.available()) {
+    char c = client.read();
+    currentRequest += c;
+    if (currentRequest.endsWith("\r\n\r\n")) {
+      handleRequest(client, currentRequest);
+      client.stop();
+      return;
+    }
+  }
+
+  if (millis() - lastClientCheck > clientTimeout) {
+    client.stop();
+    Serial.println("Client timeout");
+  }
+}
+
+void handleRequest(EthernetClient &client, String request) {
+  Serial.println("Memproses request:");
+  Serial.println(request);
+
+  if (request.indexOf("GET /erase") >= 0) {
+    eraseAllData();
+    sendHTML(client, "Semua data berhasil dihapus.");
+  } 
+  else if (request.indexOf("GET /delete?id=") >= 0) {
+    int idIndex = request.indexOf("id=") + 3;
+    String id = request.substring(idIndex, request.indexOf(" ", idIndex));
+    id = urlDecode(id);
+    deleteRowById(id);
+    sendHTML(client, "Data berhasil dihapus.");
+  } 
+  else if (request.indexOf("GET /add?") >= 0) {
+    int i1 = request.indexOf("id=") + 3;
+    int i2 = request.indexOf("&nama=");
+    int i3 = request.indexOf("&unit=");
+    String id = urlDecode(request.substring(i1, i2));
+    String nama = urlDecode(request.substring(i2 + 6, i3));
+    String unit = urlDecode(request.substring(i3 + 6, request.indexOf(" ", i3)));
+    writeData(id, nama, unit);
+    sendHTML(client, "Data berhasil ditambahkan.");
+  } 
+  else {
+    sendHTML(client);
+  }
+}
+
+void sendHTML(EthernetClient &client, String msg) {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
   client.println();
-  client.println("<!DOCTYPE html><html><head><title>Data SPIFFS</title></head><body>");
-  client.println("<h2>Data Tersimpan</h2>");
+  client.println("<!DOCTYPE html><html><head><title>Elban Rendani</title>");
+  client.println("<style>");
+  client.println("body { background-color: #121212; color: #f5f5f5; font-family: sans-serif; padding: 20px; text-align: center; }");
+  client.println("table { width: 100%; border-collapse: collapse; margin-top: 20px; }");
+  client.println("th, td { padding: 12px; border: 1px solid #333; text-align: center; }");
+  client.println("th { background-color: #222; color: #fff; }");
+  client.println("tr:nth-child(even) { background-color: #1e1e1e; }");
+  client.println("tr:hover { background-color: #2c2c2c; }");
+  client.println("input, button { padding: 8px; background-color: #333; color: white; border: none; margin-top: 5px; }");
+  client.println("a { color: #4FC3F7; text-decoration: none; }");
+  client.println("a:hover { text-decoration: underline; }");
+  client.println("</style></head><body>");
 
+  client.println("<h2>Elban Rendani</h2>");
+  client.println("<p><i>Register RFID 1</i></p>");
   if (msg != "") client.println("<p><b>" + msg + "</b></p>");
 
-  client.println("<table border='1'><tr><th>ID</th><th>Nama</th><th>Unit</th><th>Aksi</th></tr>");
-
+  client.println("<table><tr><th>ID</th><th>Nama</th><th>Enable</th><th>Aksi</th></tr>");
   File file = SPIFFS.open(dataPath);
   while (file.available()) {
     String line = file.readStringUntil('\n');
@@ -49,16 +146,13 @@ void sendHTML(EthernetClient &client, String msg = "") {
   file.close();
   client.println("</table>");
 
-  // Form tambah data
   client.println("<h3>Tambah Data</h3>");
   client.println("<form action='/add' method='GET'>");
   client.println("ID: <input type='text' name='id'><br>");
   client.println("Nama: <input type='text' name='nama'><br>");
-  client.println("Unit: <input type='text' name='unit'><br>");
+  client.println("Enable: <input type='text' name='unit'><br>");
   client.println("<input type='submit' value='Tambah'>");
   client.println("</form>");
-
-  // Tombol hapus semua
   client.println("<br><a href='/erase'><button>Hapus Semua Data</button></a>");
   client.println("</body></html>");
 }
@@ -66,7 +160,7 @@ void sendHTML(EthernetClient &client, String msg = "") {
 void writeData(String id, String nama, String unit) {
   File file = SPIFFS.open(dataPath, FILE_APPEND);
   if (!file) {
-    Serial.println("Gagal menulis file");
+    Serial.println("Gagal menulis ke file");
     return;
   }
   file.println(id + "," + nama + "," + unit);
@@ -98,88 +192,21 @@ void deleteRowById(String targetId) {
   writeFile.close();
 }
 
-//////////////////////////
-//  SETUP
-//////////////////////////
-
-void setup() {
-  Serial.begin(115200);
-  delay(1000);
-
-  // Inisialisasi SPI
-  SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);
-  Ethernet.init(PIN_CS);
-
-  if (!SPIFFS.begin(true)) {
-    Serial.println("Gagal mount SPIFFS");
-    return;
+String urlDecode(String input) {
+  String decoded = "";
+  char c;
+  for (int i = 0; i < input.length(); i++) {
+    c = input[i];
+    if (c == '+') {
+      decoded += ' ';
+    } else if (c == '%') {
+      String hex = input.substring(i + 1, i + 3);
+      decoded += (char) strtol(hex.c_str(), NULL, 16);
+      i += 2;
+    } else {
+      decoded += c;
+    }
   }
-
-  // DHCP terlebih dahulu
-  // if (Ethernet.begin(mac) == 0) {
-  //   Serial.println("DHCP gagal, coba static IP...");
-  //   Ethernet.begin(mac, ip);
-  // }
-
-  Ethernet.begin(mac, ip);
-
-  delay(1000);
-  server.begin();
-  Serial.print("Server IP: ");
-  Serial.println(Ethernet.localIP());
-
-  // Buat file jika belum ada
-  if (!SPIFFS.exists(dataPath)) {
-    File f = SPIFFS.open(dataPath, FILE_WRITE);
-    f.close();
-  }
+  return decoded;
 }
 
-//////////////////////////
-//  LOOP UTAMA
-//////////////////////////
-
-void loop() {
-  EthernetClient client = server.available();
-
-  if (client) {
-    Serial.println("Client connected");
-    String request = "";
-    while (client.connected()) {
-      if (client.available()) {
-        char c = client.read();
-        request += c;
-        if (c == '\n' && request.endsWith("\r\n\r\n")) break;
-      }
-    }
-
-    // Routing berdasarkan URL
-    if (request.indexOf("GET /erase") >= 0) {
-      eraseAllData();
-      sendHTML(client, "Semua data berhasil dihapus.");
-    } 
-    else if (request.indexOf("GET /delete?id=") >= 0) {
-      int idIndex = request.indexOf("id=") + 3;
-      String id = request.substring(idIndex, request.indexOf(" ", idIndex));
-      deleteRowById(id);
-      sendHTML(client, "Data berhasil dihapus.");
-    } 
-    else if (request.indexOf("GET /add?") >= 0) {
-      int i1 = request.indexOf("id=") + 3;
-      int i2 = request.indexOf("&nama=");
-      int i3 = request.indexOf("&unit=");
-      String id = request.substring(i1, i2);
-      String nama = request.substring(i2 + 6, i3);
-      String unit = request.substring(i3 + 6, request.indexOf(" ", i3));
-      writeData(id, nama, unit);
-      sendHTML(client, "Data berhasil ditambahkan.");
-    } 
-    else {
-      sendHTML(client);
-    }
-
-    delay(1);
-    client.stop();
-    Serial.println("Client disconnected");
-  }
-}
