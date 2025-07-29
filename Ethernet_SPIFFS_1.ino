@@ -116,10 +116,12 @@ void setup() {
   }
 
   // DHCP terlebih dahulu
-  if (Ethernet.begin(mac) == 0) {
-    Serial.println("DHCP gagal, coba static IP...");
-    Ethernet.begin(mac, ip);
-  }
+  // if (Ethernet.begin(mac) == 0) {
+  //   Serial.println("DHCP gagal, coba static IP...");
+  //   Ethernet.begin(mac, ip);
+  // }
+
+  Ethernet.begin(mac, ip);
 
   delay(1000);
   server.begin();
