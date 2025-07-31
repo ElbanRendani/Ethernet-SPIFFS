@@ -222,6 +222,17 @@ void sendHTML(EthernetClient &client, String msg) {
   client.println("</body></html>");
 }
 
+
+  /*
+  
+  writeData(String id, String nama, String unit);
+  Param 1: id petugas
+  Param 2: nama petugas
+  Param 3: unit petugas
+
+  Tujuan: menuliskan Data ID,Nama,Unit ke SPIFFS
+  
+  */
 void writeData(String id, String nama, String unit) {
   File file = SPIFFS.open(dataPath, FILE_APPEND);
   if (!file) {
@@ -232,6 +243,15 @@ void writeData(String id, String nama, String unit) {
   file.close();
 }
 
+
+  /*
+  
+void eraseAllData()
+  Param : none
+  
+  Tujuan: Menghapus semua data di SPIFFS
+  
+  */
 void eraseAllData() {
   SPIFFS.remove(dataPath);
   File f = SPIFFS.open(dataPath, FILE_WRITE);
