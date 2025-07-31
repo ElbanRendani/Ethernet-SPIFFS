@@ -8,7 +8,7 @@ byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 IPAddress ip(192, 168, 1, 177);
 EthernetServer server(80);
 
-// Pin W5500
+// Konfigurasi pin SPI
 #define PIN_SCK  18
 #define PIN_MISO 19
 #define PIN_MOSI 23
@@ -17,11 +17,24 @@ EthernetServer server(80);
 // Path file
 const char* dataPath = "/data.txt";
 
+
+
+
 // Global state
 String currentRequest = "";
 EthernetClient client;
 unsigned long lastClientCheck = 0;
 const unsigned long clientTimeout = 1000;
+
+
+/* 
+**NOTE**
+VARIABLE GLOBAL
+Tujuan mendeklarasikan Variable di bagian paling atas sebelum fungsi setup adalah untuk menjadikan variable ini sebagai variable global
+artinyua dia dapat di akses di semua Fungsi yang di deklarasikan di bawah, Jika sebuah variable di deklarasikan di dalam fungsi dia akan 
+di anggap sebagai variable lokal dan hanya akan terbaca pada fungsi itu saja
+*/
+
 
 // Function declarations
 void handleRequest(EthernetClient &client, String request);
@@ -33,6 +46,13 @@ String urlDecode(String input);
 
 void setup() {
   Serial.begin(115200);
+
+  /*
+  
+  **NOTE**
+  Pada project yang menggunakan ESP32 harus di deklarasikan lagi pin SPI nya
+
+  */
   SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);
   Ethernet.init(PIN_CS);
 
@@ -41,6 +61,13 @@ void setup() {
     return;
   }
 
+
+    /*
+  
+  **NOTE**
+  pada Project ini Hanya MAC dan IP yang di atur secara statis, sisanya di atur oleh DHCP
+
+  */
   Ethernet.begin(mac, ip);
   delay(1000);
   server.begin();
@@ -71,11 +98,37 @@ void loop() {
     }
   }
 
+
+  
   if (millis() - lastClientCheck > clientTimeout) {
     client.stop();
     Serial.println("Client timeout");
   }
 }
+
+
+
+
+
+
+
+
+
+
+  /*
+  
+ ================================================ **NOTE** ==========================================================================
+
+  
+Fungsi di bawah ini bertujuan untuk membaca dan memecahkan URL kemudian di masukan sebagai variable yang akan di proses lagi,
+di dalam sini terdapat fungsi urlDecode(String input);
+gunanya adalah untuk menghapus tanda + di dalam URL dan menggantinya dengan spasi (in case dalam data yang dimasukan terdapat spasi)
+Input     : Abang Tio
+URL       : Abang+Tio
+Variable  : Abang Tio
+
+====================================================================================================================================
+  */
 
 void handleRequest(EthernetClient &client, String request) {
   Serial.println("Memproses request:");
