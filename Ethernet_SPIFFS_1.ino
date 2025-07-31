@@ -161,10 +161,17 @@ void handleRequest(EthernetClient &client, String request) {
 }
 
 void sendHTML(EthernetClient &client, String msg) {
+
+
+  // Start Header Protocol
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
   client.println();
+
+
+
+  //HTML CODE
   client.println("<!DOCTYPE html><html><head><title>Elban Rendani</title>");
   client.println("<style>");
   client.println("body { background-color: #121212; color: #f5f5f5; font-family: sans-serif; padding: 20px; text-align: center; }");
@@ -185,6 +192,11 @@ void sendHTML(EthernetClient &client, String msg) {
   client.println("<table><tr><th>ID</th><th>Nama</th><th>Enable</th><th>Aksi</th></tr>");
   File file = SPIFFS.open(dataPath);
   while (file.available()) {
+
+  /*
+  **NOTE**
+  Ini adalah algoritma yang berfungsi untuk memecah URL panjang menjadi Sigle Variable 
+  */
     String line = file.readStringUntil('\n');
     if (line.length() > 0) {
       int p1 = line.indexOf(',');
@@ -262,4 +274,3 @@ String urlDecode(String input) {
   }
   return decoded;
 }
-
