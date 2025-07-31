@@ -1,108 +1,72 @@
-#include <SPI.h>
-#include <Ethernet.h>
-#include "FS.h"
-#include "SPIFFS.h"
+#include <SPI.h>           // Library komunikasi SPI
+#include <Ethernet.h>      // Library Ethernet untuk koneksi web server
+#include "FS.h"            // File System untuk ESP32
+#include "SPIFFS.h"        // SPIFFS sebagai media penyimpanan file di flash
 
-// Ethernet config
+// Konfigurasi alamat MAC dan IP statis
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-IPAddress ip(192, 168, 1, 177);
-EthernetServer server(80);
+IPAddress ip(192, 168, 1, 177); // IP statis untuk ESP32
+EthernetServer server(80);     // Membuat server di port 80 (HTTP)
 
-// Konfigurasi pin SPI
+// Konfigurasi pin SPI untuk W5500 pada ESP32
 #define PIN_SCK  18
 #define PIN_MISO 19
 #define PIN_MOSI 23
 #define PIN_CS   5
 
-// Path file
+// Lokasi file data
 const char* dataPath = "/data.txt";
 
-
-
-
-// Global state
+// Variabel global
 String currentRequest = "";
 EthernetClient client;
 unsigned long lastClientCheck = 0;
 const unsigned long clientTimeout = 1000;
 
-
-/* 
-**NOTE**
-VARIABLE GLOBAL
-Tujuan mendeklarasikan Variable di bagian paling atas sebelum fungsi setup adalah untuk menjadikan variable ini sebagai variable global
-artinyua dia dapat di akses di semua Fungsi yang di deklarasikan di bawah, Jika sebuah variable di deklarasikan di dalam fungsi dia akan 
-di anggap sebagai variable lokal dan hanya akan terbaca pada fungsi itu saja
-*/
-
-
-// Function declarations
+// Deklarasi fungsi
 void handleRequest(EthernetClient &client, String request);
 void sendHTML(EthernetClient &client, String msg = "");
 void writeData(String id, String nama, String unit);
 void eraseAllData();
 void deleteRowById(String targetId);
 String urlDecode(String input);
-  /*
- ======================================================[Setup]=====================================================================
-  */
+
+// ==========================================================================
+// Fungsi setup()
+// Inisialisasi SPI, Ethernet, dan SPIFFS
+// ==========================================================================
 void setup() {
   Serial.begin(115200);
-  /*
-  
-  **NOTE**
-  Pada project yang menggunakan ESP32 harus di deklarasikan lagi pin SPI nya
 
-  */
+  // Inisialisasi SPI dengan pin yang ditentukan
   SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);
-  Ethernet.init(PIN_CS);
+  Ethernet.init(PIN_CS); // Inisialisasi Ethernet dengan CS
 
+  // Mount SPIFFS
   if (!SPIFFS.begin(true)) {
     Serial.println("Gagal mount SPIFFS");
     return;
   }
 
-
-    /*
-  
-  **NOTE**
-  pada Project ini Hanya MAC dan IP yang di atur secara statis, sisanya di atur oleh DHCP
-
-  */
+  // Mulai koneksi Ethernet
   Ethernet.begin(mac, ip);
   delay(1000);
   server.begin();
+
   Serial.print("Server aktif di: ");
   Serial.println(Ethernet.localIP());
 
+  // Cek dan buat file jika belum ada
   if (!SPIFFS.exists(dataPath)) {
     File f = SPIFFS.open(dataPath, FILE_WRITE);
     f.close();
   }
 }
-  /*
- ======================================================[END]=====================================================================
-  */
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  /*
- <======================================================[LOOP]=====================================================================>
-  */
+// ==========================================================================
+// Fungsi loop()
+// Menangani koneksi client dan permintaan HTTP
+// ==========================================================================
 void loop() {
   if (!client || !client.connected()) {
     client = server.available();
@@ -111,9 +75,12 @@ void loop() {
     return;
   }
 
+  // Baca permintaan client
   while (client.available()) {
     char c = client.read();
     currentRequest += c;
+
+    // Jika akhir request tercapai, proses permintaan
     if (currentRequest.endsWith("\r\n\r\n")) {
       handleRequest(client, currentRequest);
       client.stop();
@@ -121,40 +88,17 @@ void loop() {
     }
   }
 
-
-  
+  // Jika timeout, putuskan koneksi
   if (millis() - lastClientCheck > clientTimeout) {
     client.stop();
     Serial.println("Client timeout");
   }
 }
-  /*
-< ======================================================[END]=====================================================================>
-  */
 
-
-
-
-
-
-
-
-
-
-
-
-
-  /*
- ================================================ **NOTE** ==========================================================================
-Fungsi di bawah ini bertujuan untuk membaca dan memecahkan URL kemudian di masukan sebagai variable yang akan di proses lagi,
-di dalam sini terdapat fungsi urlDecode(String input);
-gunanya adalah untuk menghapus tanda + di dalam URL dan menggantinya dengan spasi (in case dalam data yang dimasukan terdapat spasi)
-Input     : Abang Tio
-URL       : Abang+Tio
-Variable  : Abang Tio
-====================================================================================================================================
-  */
-
+// ==========================================================================
+// Fungsi handleRequest()
+// Memproses permintaan dari client berdasarkan URL
+// ==========================================================================
 void handleRequest(EthernetClient &client, String request) {
   Serial.println("Memproses request:");
   Serial.println(request);
@@ -181,22 +125,22 @@ void handleRequest(EthernetClient &client, String request) {
     sendHTML(client, "Data berhasil ditambahkan.");
   } 
   else {
-    sendHTML(client);
+    sendHTML(client); // Tampilkan halaman default
   }
 }
 
+// ==========================================================================
+// Fungsi sendHTML()
+// Mengirim halaman HTML ke browser client
+// ==========================================================================
 void sendHTML(EthernetClient &client, String msg) {
-
-
-  // Start Header Protocol
+  // Header HTTP
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
   client.println();
 
-
-
-  //HTML CODE
+  // HTML dan CSS halaman
   client.println("<!DOCTYPE html><html><head><title>Elban Rendani</title>");
   client.println("<style>");
   client.println("body { background-color: #121212; color: #f5f5f5; font-family: sans-serif; padding: 20px; text-align: center; }");
@@ -212,16 +156,13 @@ void sendHTML(EthernetClient &client, String msg) {
 
   client.println("<h2>Elban Rendani</h2>");
   client.println("<p><i>Register RFID 1</i></p>");
+
   if (msg != "") client.println("<p><b>" + msg + "</b></p>");
 
+  // Tabel data dari file
   client.println("<table><tr><th>ID</th><th>Nama</th><th>Enable</th><th>Aksi</th></tr>");
   File file = SPIFFS.open(dataPath);
   while (file.available()) {
-
-  /*
-  **NOTE**
-  Ini adalah algoritma yang berfungsi untuk memecah URL panjang menjadi Sigle Variable 
-  */
     String line = file.readStringUntil('\n');
     if (line.length() > 0) {
       int p1 = line.indexOf(',');
@@ -236,6 +177,7 @@ void sendHTML(EthernetClient &client, String msg) {
   file.close();
   client.println("</table>");
 
+  // Form tambah data
   client.println("<h3>Tambah Data</h3>");
   client.println("<form action='/add' method='GET'>");
   client.println("ID: <input type='text' name='id'><br>");
@@ -247,17 +189,10 @@ void sendHTML(EthernetClient &client, String msg) {
   client.println("</body></html>");
 }
 
-//=================================Start========================================
-  /*
-  
-  writeData(String id, String nama, String unit);
-  Param 1: id petugas
-  Param 2: nama petugas
-  Param 3: unit petugas
-
-  Tujuan: menuliskan Data ID,Nama,Unit ke SPIFFS
-  
-  */
+// ==========================================================================
+// Fungsi writeData()
+// Menambahkan data baru ke file SPIFFS
+// ==========================================================================
 void writeData(String id, String nama, String unit) {
   File file = SPIFFS.open(dataPath, FILE_APPEND);
   if (!file) {
@@ -267,26 +202,26 @@ void writeData(String id, String nama, String unit) {
   file.println(id + "," + nama + "," + unit);
   file.close();
 }
-//==================================END=======================================
 
-
-  /*
-  
-void eraseAllData()
-  Param : none
-  
-  Tujuan: Menghapus semua data di SPIFFS
-  
-  */
+// ==========================================================================
+// Fungsi eraseAllData()
+// Menghapus semua data dalam file
+// ==========================================================================
 void eraseAllData() {
-  SPIFFS.remove(dataPath);
-  File f = SPIFFS.open(dataPath, FILE_WRITE);
+  SPIFFS.remove(dataPath);                // Hapus file
+  File f = SPIFFS.open(dataPath, FILE_WRITE); // Buat ulang file kosong
   f.close();
 }
 
+// ==========================================================================
+// Fungsi deleteRowById()
+// Menghapus 1 baris data berdasarkan ID
+// ==========================================================================
 void deleteRowById(String targetId) {
   File file = SPIFFS.open(dataPath, FILE_READ);
   String newData = "";
+
+  // Salin semua data kecuali yang ID-nya cocok
   while (file.available()) {
     String line = file.readStringUntil('\n');
     if (line.length() > 0) {
@@ -298,11 +233,16 @@ void deleteRowById(String targetId) {
   }
   file.close();
 
+  // Tulis ulang file tanpa data yang dihapus
   File writeFile = SPIFFS.open(dataPath, FILE_WRITE);
   writeFile.print(newData);
   writeFile.close();
 }
 
+// ==========================================================================
+// Fungsi urlDecode()
+// Mengubah karakter URL (%20 → spasi, dll) ke bentuk asli
+// ==========================================================================
 String urlDecode(String input) {
   String decoded = "";
   char c;
