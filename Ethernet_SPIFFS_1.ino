@@ -43,10 +43,11 @@ void writeData(String id, String nama, String unit);
 void eraseAllData();
 void deleteRowById(String targetId);
 String urlDecode(String input);
-
+  /*
+ ======================================================[Setup]=====================================================================
+  */
 void setup() {
   Serial.begin(115200);
-
   /*
   
   **NOTE**
@@ -79,7 +80,29 @@ void setup() {
     f.close();
   }
 }
+  /*
+ ======================================================[END]=====================================================================
+  */
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /*
+ <======================================================[LOOP]=====================================================================>
+  */
 void loop() {
   if (!client || !client.connected()) {
     client = server.available();
@@ -105,6 +128,12 @@ void loop() {
     Serial.println("Client timeout");
   }
 }
+  /*
+< ======================================================[END]=====================================================================>
+  */
+
+
+
 
 
 
@@ -116,17 +145,13 @@ void loop() {
 
 
   /*
-  
  ================================================ **NOTE** ==========================================================================
-
-  
 Fungsi di bawah ini bertujuan untuk membaca dan memecahkan URL kemudian di masukan sebagai variable yang akan di proses lagi,
 di dalam sini terdapat fungsi urlDecode(String input);
 gunanya adalah untuk menghapus tanda + di dalam URL dan menggantinya dengan spasi (in case dalam data yang dimasukan terdapat spasi)
 Input     : Abang Tio
 URL       : Abang+Tio
 Variable  : Abang Tio
-
 ====================================================================================================================================
   */
 
@@ -222,7 +247,7 @@ void sendHTML(EthernetClient &client, String msg) {
   client.println("</body></html>");
 }
 
-
+//=================================Start========================================
   /*
   
   writeData(String id, String nama, String unit);
@@ -242,6 +267,7 @@ void writeData(String id, String nama, String unit) {
   file.println(id + "," + nama + "," + unit);
   file.close();
 }
+//==================================END=======================================
 
 
   /*
